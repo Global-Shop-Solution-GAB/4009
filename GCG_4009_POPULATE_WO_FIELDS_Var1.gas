@@ -1,0 +1,146 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+'Coded by Andretti Medina
+'Date 8/22/2014
+'Program created for quote #4976
+
+'In Sales Order Entry Lines screen, once the user is ready to generate a work order, then will click the "Generate WO" button.
+'Click "Yes" on message box if asked to Save. Select Work Order Type, Once on the Work Order Entry Screen and the user clicks "Save" button
+'and be taken to the Updating WO screen. Once the user clicks schedules sequences and then clicks OK. The user will be able to see the User 1 and User 2
+'fields pulled from the Order Entry lines to the WO user fields.
+
+' When the user goes to WIP to Finished Goods > Lot Serial, the User 1 and User 2 fields from the Order Entry Lines screen will auto populate the Heat Number and Serial Number fields.
+
+'If User field 1 exceedes 15 characters, it will not be pulled into WO User field 1 and WIP to Finished Goods JBS0052L, Lot/Serial screen
+'If User field 2 exceedes 30 characters, it will not be pulled into Wo user field 2 and WIP to Finished Goods JBS0052L, Lot/Serial screen
+
+V.Local.sError.Declare(String)
+
+V.Local.sSQL.Declare(String)
+V.Local.sJob.Declare(String)
+V.Local.sSuff.Declare(String)
+V.Local.sUserField1.Declare(String)
+V.Local.sUserField2.Declare(String)
+V.Local.sSched.Declare(String)
+V.Local.sSO.Declare(String)
+V.Local.sLine.Declare(String)
+
+V.Local.sSerial.Declare(String)
+V.local.sHeat.Declare(String)
+
+F.ODBC.connection!conx.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+	'Event Fired hook from schedule command on WO screen
+	F.Intrinsic.Control.Case(39900)
+		'If MSG-EVENT-NAME-ID passed Variable has a value of 579802, this means the order has been scheduled.
+		V.local.sSched.set(V.Passed.MSG-EVENT-NAME-ID)
+		F.Intrinsic.Control.If(V.Local.sSched,=,579802)
+			V.Local.sJob.Set(V.Passed.MSG-WO)
+			V.Local.sSuff.Set(V.Passed.MSG-WO-SUFF)
+			F.Intrinsic.String.Build("Select * from Order_To_Wo where Job = '{0}' and Suffix = '{1}'",V.Local.sJob,V.Local.sSuff,V.Local.sSQL)
+			F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+			F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,<>,True)
+				V.Local.sSO.Set(V.ODBC.conx!rst.FieldValTrim!ORDER_NO)
+				V.Local.sLine.Set(V.ODBC.conx!rst.FieldValTrim!ORDER_LINE)
+				F.ODBC.conx!rst.Close
+				F.Intrinsic.String.Build("Select * from V_Order_Lines Where Order_No = '{0}' and Record_No = '{1}'",V.Local.sSO,V.Local.sLine,V.Local.sSQL)
+				F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+					V.Local.sUserField1.Set(V.ODBC.conx!rst.FieldValTrim!USER_1)
+					V.Local.sUserField2.Set(V.ODBC.conx!rst.FieldValTrim!USER_2)
+				F.ODBC.conx!rst.Close
+
+				F.Intrinsic.Control.If(V.Local.sUserField1.Length,>,15)
+					V.Local.sUserField1.Set("")
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.If(V.Local.sUserField2.Length,>,30)
+					V.Local.sUserField2.Set("")
+				F.Intrinsic.Control.EndIf
+
+				F.Intrinsic.String.Build("Select * from WO_User_Flds Where Job = '{0}' and Suffix = '{1}'",V.Local.sJob,V.local.sSuff,V.Local.sSQL)
+				F.ODBC.Connection!conx.OpenRecordsetRW("rst",V.local.sSQL)
+				F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,True)
+					F.ODBC.conx!rst.AddNew
+					F.ODBC.conx!rst.Set!JOB(V.Local.sJob)
+					F.ODBC.conx!rst.Set!SUFFIX(V.Local.sSuff)
+					F.ODBC.conx!rst.Set!USER_1(V.Local.sUserField1)
+					F.ODBC.conx!rst.Set!USER_2(V.Local.sUserField2)
+					F.ODBC.conx!rst.Update
+				F.Intrinsic.Control.Else
+					F.ODBC.conx!rst.Set!USER_1(V.Local.sUserField1)
+					F.ODBC.conx!rst.Set!USER_2(V.Local.sUserField2)
+					F.ODBC.conx!rst.Update
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Else
+				F.ODBC.conx!rst.Close
+				F.Intrinsic.Control.CallSub(Program_unload)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			F.ODBC.conx!rst.Close
+			F.Intrinsic.Control.CallSub(Program_unload)
+		F.Intrinsic.Control.EndIf
+
+	F.Intrinsic.Control.Case(16500)
+		V.Local.sJob.Set(V.Passed.000005)
+		V.Local.sSuff.Set(V.Passed.000006)
+
+		F.Intrinsic.String.Build("Select * From WO_User_FLDS Where Job = '{0}' and suffix = '{1}'",V.Local.sJob,V.Local.sSuff,V.local.sSQL)
+		F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,<>,True)
+
+			V.Local.sHeat.Set(V.ODBC.conx!rst.FieldValTrim!USER_1)
+			V.Local.sSerial.Set(V.ODBC.conx!rst.FieldValTrim!USER_2)
+
+			F.Intrinsic.Control.If(V.Local.sHeat.Length,>,15)
+				'F.Intrinsic.String.RPad(V.Local.sHeat,"",15,V.Local.sHeat)
+				V.Local.sHeat.Set("")
+			F.Intrinsic.Control.EndIf
+				
+			F.Intrinsic.Control.If(V.Local.sSerial.Length,>,30)
+				'F.Intrinsic.String.RPad(V.Local.sSerial,"",30,V.Local.sSerial)
+				V.Local.sSerial.Set("")
+			F.Intrinsic.Control.EndIf
+
+			V.Passed.000013.Set(V.Local.sHeat)
+			V.Passed.000014.Set(V.Local.sSerial)
+
+		F.Intrinsic.Control.Else
+			F.ODBC.conx!rst.Close
+			F.Intrinsic.Control.CallSub(Program_unload)
+		F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4009_POPULATE_WO_FIELDS_Var1.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Program_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.program_unload.Start
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.End
+
+Program.Sub.program_unload.End
+
+Program.Sub.Comments.Start
+${$0$}$ATG_POPULATE_WO_FIELDS_II$}$AGM$}$8/21/2014
+${$1$}$$}$$}$1$}$16500$}$JBS0052L-POPULATE-HOOK$}$5/11/2016 1:19:39 PM$}$(Program: JB0052GI  ; Screen: JBS0052L)
+
+${$1$}$$}$$}$0$}$39900$}$Event Fired$}$5/11/2016 1:19:19 PM$}$(Program: MSG010; Screen: )
+
+Program.Sub.Comments.End
+
